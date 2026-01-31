@@ -1,0 +1,391 @@
+#!/usr/bin/env node
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+  Tool,
+} from "@modelcontextprotocol/sdk/types.js";
+import { readFileSync } from "node:fs";
+import { createServer, IncomingMessage, ServerResponse } from "node:http";
+import { request as undiciRequest } from "undici";
+
+// ----- Configuration -----
+const PLANKA_BASE_URL = process.env.PLANKA_BASE_URL || "http://localhost:3000";
+const PLANKA_USERNAME = process.env.PLANKA_USERNAME;
+const PLANKA_PASSWORD = process.env.PLANKA_PASSWORD;
+const MCP_PORT = parseInt(process.env.MCP_PORT || "3001", 10);
+const MCP_TRANSPORT = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "sse"
+
+// ----- Load the OpenAPI spec -----
+const specPath = process.env.OPENAPI_SPEC_PATH || "./swagger.json";
+const openapi = JSON.parse(readFileSync(specPath, "utf-8"));
+
+// ----- Token management -----
+let cachedToken: string | null = null;
+let tokenExpiry: number = 0;
+
+async function getAccessToken(): Promise<string> {
+  // Return cached token if still valid (with 5 min buffer)
+  if (cachedToken && Date.now() < tokenExpiry - 5 * 60 * 1000) {
+    return cachedToken;
+  }
+
+  if (!PLANKA_USERNAME || !PLANKA_PASSWORD) {
+    throw new Error("PLANKA_USERNAME and PLANKA_PASSWORD environment variables are required");
+  }
+
+  const loginUrl = `${PLANKA_BASE_URL}/api/access-tokens`;
+  
+  const res = await undiciRequest(loginUrl, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Accept": "application/json",
+    },
+    body: JSON.stringify({
+      emailOrUsername: PLANKA_USERNAME,
+      password: PLANKA_PASSWORD,
+    }),
+  });
+
+  const text = await res.body.text();
+  
+  if (res.statusCode !== 200) {
+    throw new Error(`Authentication failed: ${res.statusCode} - ${text}`);
+  }
+
+  const data = JSON.parse(text);
+  cachedToken = data.item;
+  // Set expiry to 24 hours from now (Planka tokens typically last longer, but this is safe)
+  tokenExpiry = Date.now() + 24 * 60 * 60 * 1000;
+  
+  return cachedToken!;
+}
+
+// ----- Helper functions -----
+function truncate(s: string, n: number): string {
+  return s.length > n ? s.slice(0, n) + "…" : s;
+}
+
+function toolName(method: string, path: string, op: any): string {
+  return (op.operationId || `${method}_${path.replace(/[\/{}]/g, "_")}`).toLowerCase();
+}
+
+// ----- Build MCP tools from OpenAPI spec -----
+interface ToolDefinition {
+  tool: Tool;
+  method: string;
+  path: string;
+  requiresAuth: boolean;
+}
+
+function buildToolsFromOpenApi(): ToolDefinition[] {
+  const tools: ToolDefinition[] = [];
+  
+  for (const [path, methods] of Object.entries<any>(openapi.paths || {})) {
+    for (const method of Object.keys(methods)) {
+      if (method === "parameters") continue; // Skip path-level parameters
+      
+      const op = methods[method];
+      if (!op) continue;
+      
+      const name = toolName(method, path, op);
+      
+      // Check if this endpoint requires authentication
+      const requiresAuth = op.security === undefined || op.security?.length > 0;
+      
+      // Build input schema from OpenAPI parameters
+      const properties: Record<string, any> = {};
+      const required: string[] = [];
+      
+      // Extract path parameters
+      const pathParams = (op.parameters || []).filter((p: any) => p.in === "path");
+      const queryParams = (op.parameters || []).filter((p: any) => p.in === "query");
+      
+      if (pathParams.length > 0) {
+        properties.params = {
+          type: "object",
+          description: "Path parameters",
+          properties: Object.fromEntries(
+            pathParams.map((p: any) => [p.name, { type: p.schema?.type || "string", description: p.description }])
+          ),
+          required: pathParams.filter((p: any) => p.required).map((p: any) => p.name),
+        };
+      }
+      
+      if (queryParams.length > 0) {
+        properties.query = {
+          type: "object",
+          description: "Query parameters",
+          properties: Object.fromEntries(
+            queryParams.map((p: any) => [p.name, { type: p.schema?.type || "string", description: p.description }])
+          ),
+        };
+      }
+      
+      // Check for request body
+      if (op.requestBody) {
+        properties.body = {
+          type: "object",
+          description: "Request body",
+          additionalProperties: true,
+        };
+      }
+
+      const description = op.description || op.summary || `Calls ${method.toUpperCase()} ${path}`;
+
+      const tool: Tool = {
+        name,
+        description,
+        inputSchema: {
+          type: "object",
+          properties,
+          required,
+        },
+      };
+
+      tools.push({ tool, method, path, requiresAuth });
+    }
+  }
+  
+  return tools;
+}
+
+// ----- Execute API call -----
+async function executeApiCall(
+  method: string,
+  path: string,
+  requiresAuth: boolean,
+  input: any
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    // Construct URL with path parameters
+    let actualPath = path;
+    if (input?.params) {
+      for (const [k, v] of Object.entries(input.params)) {
+        actualPath = actualPath.replace(`{${k}}`, encodeURIComponent(String(v)));
+      }
+    }
+
+    const url = new URL(`${PLANKA_BASE_URL}/api${actualPath}`);
+
+    // Add query parameters
+    if (input?.query) {
+      for (const [k, v] of Object.entries(input.query)) {
+        if (Array.isArray(v)) {
+          v.forEach(val => url.searchParams.append(k, String(val)));
+        } else if (v !== undefined && v !== null) {
+          url.searchParams.set(k, String(v));
+        }
+      }
+    }
+
+    const methodUpper = method.toUpperCase();
+    const headers: Record<string, string> = {
+      "Accept": "application/json",
+    };
+
+    // Add authentication header if required
+    if (requiresAuth) {
+      const token = await getAccessToken();
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    // Handle request body
+    let body: string | undefined = undefined;
+    if (["POST", "PUT", "PATCH"].includes(methodUpper) && input?.body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(input.body);
+    }
+
+    const res = await undiciRequest(url, { method: methodUpper, headers, body });
+    const contentType = res.headers["content-type"] || "";
+    const text = await res.body.text();
+
+    let data: any = text;
+    if (contentType.includes("application/json") && text) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // Keep as text if JSON parsing fails
+      }
+    }
+
+    if (res.statusCode >= 200 && res.statusCode < 300) {
+      return { success: true, data };
+    } else {
+      // If we get 401, clear the cached token and retry once
+      if (res.statusCode === 401 && requiresAuth && cachedToken) {
+        cachedToken = null;
+        tokenExpiry = 0;
+        return executeApiCall(method, path, requiresAuth, input);
+      }
+      
+      return {
+        success: false,
+        error: `HTTP ${res.statusCode}: ${truncate(typeof data === 'string' ? data : JSON.stringify(data), 2000)}`,
+      };
+    }
+  } catch (error) {
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
+// ----- Initialize MCP Server -----
+const toolDefinitions = buildToolsFromOpenApi();
+const toolMap = new Map(toolDefinitions.map(t => [t.tool.name, t]));
+
+function createMcpServer() {
+  const server = new McpServer(
+    {
+      name: "planka-mcp",
+      version: "1.0.0",
+    },
+    {
+      capabilities: {
+        tools: {},
+      },
+    }
+  );
+
+  // Handle list tools request
+  server.server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: toolDefinitions.map(t => t.tool),
+    };
+  });
+
+  // Handle tool execution
+  server.server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+    
+    const toolDef = toolMap.get(name);
+    if (!toolDef) {
+      return {
+        content: [{ type: "text", text: `Unknown tool: ${name}` }],
+        isError: true,
+      };
+    }
+
+    const result = await executeApiCall(
+      toolDef.method,
+      toolDef.path,
+      toolDef.requiresAuth,
+      args
+    );
+
+    if (result.success) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: typeof result.data === "string" 
+              ? result.data 
+              : JSON.stringify(result.data, null, 2),
+          },
+        ],
+      };
+    } else {
+      return {
+        content: [{ type: "text", text: result.error || "Unknown error" }],
+        isError: true,
+      };
+    }
+  });
+
+  return server;
+}
+
+// ----- Start the server -----
+async function main() {
+  if (MCP_TRANSPORT === "sse") {
+    // SSE transport - supports multiple clients over HTTP
+    const activeTransports = new Map<string, SSEServerTransport>();
+
+    const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
+      // Enable CORS for browser clients
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+      if (req.method === "OPTIONS") {
+        res.writeHead(204);
+        res.end();
+        return;
+      }
+
+      const url = new URL(req.url || "/", `http://${req.headers.host}`);
+
+      if (url.pathname === "/sse" && req.method === "GET") {
+        // New SSE connection - create a new server instance for this client
+        const mcpServer = createMcpServer();
+        const transport = new SSEServerTransport("/messages", res);
+        
+        const sessionId = transport.sessionId;
+        activeTransports.set(sessionId, transport);
+        
+        console.error(`Client connected: ${sessionId} (${activeTransports.size} active clients)`);
+
+        transport.onclose = () => {
+          activeTransports.delete(sessionId);
+          console.error(`Client disconnected: ${sessionId} (${activeTransports.size} active clients)`);
+        };
+
+        await mcpServer.server.connect(transport);
+      } else if (url.pathname === "/messages" && req.method === "POST") {
+        // Handle messages for existing SSE connection
+        const sessionId = url.searchParams.get("sessionId");
+        
+        if (!sessionId) {
+          res.writeHead(400, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Missing sessionId parameter" }));
+          return;
+        }
+
+        const transport = activeTransports.get(sessionId);
+        if (!transport) {
+          res.writeHead(404, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Session not found" }));
+          return;
+        }
+
+        await transport.handlePostMessage(req, res);
+      } else if (url.pathname === "/health") {
+        // Health check endpoint
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ 
+          status: "ok", 
+          activeClients: activeTransports.size,
+          toolsAvailable: toolDefinitions.length 
+        }));
+      } else {
+        res.writeHead(404, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ error: "Not found" }));
+      }
+    });
+
+    httpServer.listen(MCP_PORT, () => {
+      console.error(`Planka MCP server (SSE) listening on http://localhost:${MCP_PORT}`);
+      console.error(`  - SSE endpoint: http://localhost:${MCP_PORT}/sse`);
+      console.error(`  - Messages endpoint: http://localhost:${MCP_PORT}/messages`);
+      console.error(`  - Health check: http://localhost:${MCP_PORT}/health`);
+      console.error(`  - ${toolDefinitions.length} tools available`);
+    });
+  } else {
+    // Stdio transport - single client mode
+    const mcpServer = createMcpServer();
+    const transport = new StdioServerTransport();
+    await mcpServer.server.connect(transport);
+    console.error(`Planka MCP server started (stdio mode, ${toolDefinitions.length} tools available)`);
+  }
+}
+
+main().catch((error) => {
+  console.error("Fatal error:", error);
+  process.exit(1);
+});

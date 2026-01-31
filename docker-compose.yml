@@ -1,0 +1,14 @@
+services:
+  planka-mcp:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      - MCP_TRANSPORT=sse
+      - MCP_PORT=3001
+      - PLANKA_BASE_URL=${PLANKA_BASE_URL:-http://host.docker.internal:3000}
+      - PLANKA_USERNAME=${PLANKA_USERNAME}
+      - PLANKA_PASSWORD=${PLANKA_PASSWORD}
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
