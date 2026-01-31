@@ -38,9 +38,7 @@ npx planka-mcp
 ### Via Docker
 
 ```bash
-docker pull chmald/planka-mcp
-# or build locally
-docker build -t planka-mcp .
+docker pull chmald/planka-mcp:latest
 ```
 
 ## Configuration
@@ -166,8 +164,6 @@ docker compose up -d
 #### Using Docker Directly
 
 ```bash
-docker build -t planka-mcp .
-
 docker run -d \
   --name planka-mcp \
   -p 3001:3001 \
@@ -176,7 +172,7 @@ docker run -d \
   -e PLANKA_USERNAME=admin \
   -e PLANKA_PASSWORD=your-password \
   --restart unless-stopped \
-  planka-mcp
+  chmald/planka-mcp:latest
 ```
 
 #### Health Check
@@ -206,12 +202,28 @@ MCP_TRANSPORT=sse PLANKA_BASE_URL=http://localhost:3000 PLANKA_USERNAME=admin PL
 Run directly without installing:
 
 ```bash
-npx @your-org/planka-mcp
+npx planka-mcp
 ```
 
 ## Client Configuration Examples
 
 ### For Docker/SSE Deployment
+
+First, start the MCP server using Docker:
+
+```bash
+docker run -d \
+  --name planka-mcp \
+  -p 3001:3001 \
+  -e MCP_TRANSPORT=sse \
+  -e PLANKA_BASE_URL=http://your-planka-server:3000 \
+  -e PLANKA_USERNAME=admin \
+  -e PLANKA_PASSWORD=your-password \
+  --restart unless-stopped \
+  chmald/planka-mcp:latest
+```
+
+Then configure your MCP clients to connect:
 
 Claude Desktop (`claude_desktop_config.json`):
 ```json
@@ -219,7 +231,7 @@ Claude Desktop (`claude_desktop_config.json`):
   "mcpServers": {
     "planka": {
       "type": "sse",
-      "url": "http://your-server:3001/sse"
+      "url": "http://localhost:3001/sse"
     }
   }
 }
@@ -231,11 +243,13 @@ VS Code (`.vscode/mcp.json`):
   "servers": {
     "planka": {
       "type": "sse",
-      "url": "http://your-server:3001/sse"
+      "url": "http://localhost:3001/sse"
     }
   }
 }
 ```
+
+> **Note:** Replace `localhost` with your server's hostname/IP if running Docker on a remote machine.
 
 ### For npm Global Install
 
