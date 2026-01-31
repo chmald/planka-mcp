@@ -306,6 +306,10 @@ async function main() {
   if (MCP_TRANSPORT === "sse") {
     // SSE transport - supports multiple clients over HTTP
     const activeTransports = new Map<string, SSEServerTransport>();
+    const heartbeatIntervals = new Map<string, NodeJS.Timeout>();
+
+    // Heartbeat interval in milliseconds (30 seconds to prevent proxy/load balancer timeouts)
+    const HEARTBEAT_INTERVAL = 30000;
 
     const httpServer = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       // Enable CORS for browser clients
@@ -331,12 +335,47 @@ async function main() {
         
         console.error(`Client connected: ${sessionId} (${activeTransports.size} active clients)`);
 
-        transport.onclose = () => {
+        // Set up heartbeat to keep connection alive
+        const heartbeat = setInterval(() => {
+          try {
+            // Send SSE comment as heartbeat (doesn't affect protocol)
+            if (!res.writableEnded) {
+              res.write(": heartbeat\n\n");
+            }
+          } catch (err) {
+            console.error(`Heartbeat failed for ${sessionId}:`, err);
+            clearInterval(heartbeat);
+            heartbeatIntervals.delete(sessionId);
+          }
+        }, HEARTBEAT_INTERVAL);
+        heartbeatIntervals.set(sessionId, heartbeat);
+
+        // Handle connection close
+        const cleanup = () => {
+          const hb = heartbeatIntervals.get(sessionId);
+          if (hb) {
+            clearInterval(hb);
+            heartbeatIntervals.delete(sessionId);
+          }
           activeTransports.delete(sessionId);
           console.error(`Client disconnected: ${sessionId} (${activeTransports.size} active clients)`);
         };
 
-        await mcpServer.server.connect(transport);
+        transport.onclose = cleanup;
+        
+        // Also handle HTTP connection close events
+        res.on("close", cleanup);
+        res.on("error", (err) => {
+          console.error(`SSE stream error for ${sessionId}:`, err);
+          cleanup();
+        });
+
+        try {
+          await mcpServer.server.connect(transport);
+        } catch (err) {
+          console.error(`Failed to connect transport for ${sessionId}:`, err);
+          cleanup();
+        }
       } else if (url.pathname === "/messages" && req.method === "POST") {
         // Handle messages for existing SSE connection
         const sessionId = url.searchParams.get("sessionId");
@@ -354,7 +393,13 @@ async function main() {
           return;
         }
 
-        await transport.handlePostMessage(req, res);
+        try {
+          await transport.handlePostMessage(req, res);
+        } catch (err) {
+          console.error(`Error handling message for ${sessionId}:`, err);
+          res.writeHead(500, { "Content-Type": "application/json" });
+          res.end(JSON.stringify({ error: "Internal server error" }));
+        }
       } else if (url.pathname === "/health") {
         // Health check endpoint
         res.writeHead(200, { "Content-Type": "application/json" });
@@ -369,12 +414,17 @@ async function main() {
       }
     });
 
+    // Set keep-alive timeout to prevent premature connection closure
+    httpServer.keepAliveTimeout = 120000; // 2 minutes
+    httpServer.headersTimeout = 125000; // Slightly higher than keepAliveTimeout
+
     httpServer.listen(MCP_PORT, () => {
       console.error(`Planka MCP server (SSE) listening on http://localhost:${MCP_PORT}`);
       console.error(`  - SSE endpoint: http://localhost:${MCP_PORT}/sse`);
       console.error(`  - Messages endpoint: http://localhost:${MCP_PORT}/messages`);
       console.error(`  - Health check: http://localhost:${MCP_PORT}/health`);
       console.error(`  - ${toolDefinitions.length} tools available`);
+      console.error(`  - Heartbeat interval: ${HEARTBEAT_INTERVAL / 1000}s`);
     });
   } else {
     // Stdio transport - single client mode
