@@ -1,6 +1,6 @@
 {
-  "name": "planka-mcp",
-  "version": "1.0.0",
+  "name": "@chmald/planka-mcp",
+  "version": "1.0.1",
   "description": "MCP server for Planka - Real-Time Collaborative Kanban Board",
   "main": "dist/server.js",
   "type": "module",
