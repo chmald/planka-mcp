@@ -10,6 +10,8 @@ import {
 import { readFileSync } from "node:fs";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { request as undiciRequest } from "undici";
+import { fileURLToPath } from "node:url";
+import { dirname, join } from "node:path";
 
 // ----- Configuration -----
 const PLANKA_BASE_URL = process.env.PLANKA_BASE_URL || "http://localhost:3000";
@@ -19,7 +21,11 @@ const MCP_PORT = parseInt(process.env.MCP_PORT || "3001", 10);
 const MCP_TRANSPORT = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "sse"
 
 // ----- Load the OpenAPI spec -----
-const specPath = process.env.OPENAPI_SPEC_PATH || "./swagger.json";
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+// Default path resolves relative to the package root (one level up from dist/)
+const defaultSpecPath = join(__dirname, "..", "swagger.json");
+const specPath = process.env.OPENAPI_SPEC_PATH || defaultSpecPath;
 const openapi = JSON.parse(readFileSync(specPath, "utf-8"));
 
 // ----- Token management -----
