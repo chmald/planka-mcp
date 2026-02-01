@@ -1,8 +1,10 @@
 node_modules
-src
-*.ts
-tsconfig.json
+dist
 .git
 .gitignore
 *.md
 .vscode
+.env*
+coverage
+.nyc_output
+*.log
