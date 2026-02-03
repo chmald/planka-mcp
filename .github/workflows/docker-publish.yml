@@ -97,7 +97,7 @@ jobs:
             maintainer=Christopher Maldonado <chmald@microsoft.com>
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
@@ -123,7 +123,7 @@ jobs:
 
       - name: Generate SBOM
         if: github.event_name != 'pull_request'
-        uses: anchore/sbom-action@v0
+        uses: anchore/sbom-action@v1
         with:
           image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.package-version.outputs.version }}
           artifact-name: sbom-${{ steps.package-version.outputs.version }}.spdx.json
