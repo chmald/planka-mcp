@@ -5,7 +5,7 @@
  * Uses compiled dist output to test the actual built modules
  */
 
-import { describe, it, expect, beforeAll } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 
 // Import from compiled dist (after build)
