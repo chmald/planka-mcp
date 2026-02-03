@@ -6,13 +6,13 @@
 
 An MCP (Model Context Protocol) server that enables AI assistants to interact with [Planka](https://planka.app/) - a real-time collaborative Kanban board application.
 
-> **Note:** This server uses the official [Planka OpenAPI specification](https://plankanban.github.io/planka/swagger-ui/) (`swagger.json`) to automatically generate all API endpoints and tools.
-
 ## Features
 
 - 🔌 **Two transport modes**: stdio (single-client) and SSE (multi-client)
 - 🔐 **Automatic authentication** with token caching and refresh
-- 🛠️ **80+ tools** for managing projects, boards, lists, cards, tasks, and more
+- 🛠️ **27 grouped tools** covering 100 API operations for managing projects, boards, lists, cards, tasks, and more
+- 🎛️ **Configurable tool categories**: Core (9 tools), Optional (14 tools), Admin (4 tools)
+- 🏗️ **Stable API**: Tool definitions are hardcoded for stability (no external dependencies)
 - 🐳 **Docker support** with multi-architecture images (amd64, arm64)
 - 📦 **Semantic versioning** with tagged releases
 
@@ -165,6 +165,322 @@ npm run build
 | `PLANKA_PASSWORD` | Yes | - | Your Planka password |
 | `MCP_TRANSPORT` | No | `stdio` | Transport mode: `stdio` or `sse` |
 | `MCP_PORT` | No | `3001` | HTTP port for SSE mode |
+| `ENABLE_ALL_TOOLS` | No | `false` | Enable all 27 grouped tools (overrides other flags) |
+| `ENABLE_ADMIN_TOOLS` | No | `false` | Enable admin tools (webhooks, user management, config) |
+| `ENABLE_OPTIONAL_TOOLS` | No | `false` | Enable optional tools (attachments, custom fields, etc.) |
+
+### Tool Categories
+
+By default, only **core tools (9 grouped tools, 28 operations)** are enabled. Each grouped tool contains multiple related actions. You can enable additional categories:
+
+| Category | Tools | Operations | Description | Environment Variable |
+|----------|-------|------------|-------------|---------------------|
+| **Core** | 9 | 28 | Essential Kanban operations (projects, boards, lists, cards, tasks, comments, labels) | Always enabled |
+| **Optional** | 14 | 54 | Extended features (attachments, custom fields, notifications, board memberships, etc.) | `ENABLE_OPTIONAL_TOOLS=true` |
+| **Admin** | 4 | 18 | Administrative functions (user management, webhooks, config) | `ENABLE_ADMIN_TOOLS=true` |
+
+**Total: 27 grouped tools covering 100 API operations**
+
+**Enable all tools:**
+```bash
+ENABLE_ALL_TOOLS=true npx @chmald/planka-mcp
+```
+
+**Enable core + admin tools:**
+```bash
+ENABLE_ADMIN_TOOLS=true npx @chmald/planka-mcp
+```
+
+**Enable everything except admin:**
+```bash
+ENABLE_OPTIONAL_TOOLS=true npx @chmald/planka-mcp
+```
+
+### Tool Reference
+
+Each tool uses an `action` parameter to specify the operation. For example:
+```json
+{ "action": "list" }           // List all items
+{ "action": "get", "id": "123" }  // Get specific item
+{ "action": "create", "name": "New Item" }  // Create item
+```
+
+<details>
+<summary><strong>Core Tools (9 grouped tools, 28 operations)</strong> - Always enabled</summary>
+
+#### bootstrap
+System initialization tool.
+
+| Action | Description |
+|--------|-------------|
+| `get` | Retrieves application bootstrap data including current user info, projects, boards, and notifications |
+
+#### projects
+Manage Planka projects.
+
+| Action | Description |
+|--------|-------------|
+| `list` | Retrieves all projects the current user has access to |
+| `get` | Retrieves comprehensive project information including boards and memberships |
+| `create` | Creates a new project (user becomes project manager) |
+| `update` | Updates a project's settings |
+| `delete` | Deletes a project and all associated data |
+
+#### boards
+Manage boards within projects.
+
+| Action | Description |
+|--------|-------------|
+| `get` | Retrieves board with lists, cards, labels, and memberships |
+| `create` | Creates a board within a project |
+| `update` | Updates board settings and configuration |
+| `delete` | Deletes a board and all associated data |
+
+#### lists
+Manage lists within boards.
+
+| Action | Description |
+|--------|-------------|
+| `get` | Retrieves a list with its cards |
+| `create` | Creates a new list on a board |
+| `update` | Updates list name, position, or type |
+| `delete` | Deletes a list (cards move to trash) |
+
+#### cards
+Manage cards within lists.
+
+| Action | Description |
+|--------|-------------|
+| `search` | Searches for cards across all accessible boards |
+| `get` | Retrieves card with task lists, attachments, and custom fields |
+| `create` | Creates a new card in a list |
+| `update` | Updates card properties (can move between lists) |
+| `delete` | Deletes a card permanently |
+
+#### comments
+Manage comments on cards.
+
+| Action | Description |
+|--------|-------------|
+| `list` | Retrieves comments for a card with pagination |
+| `create` | Creates a comment on a card |
+
+#### tasks
+Manage task lists and tasks on cards.
+
+| Action | Description |
+|--------|-------------|
+| `getTaskList` | Retrieves a task list with all its tasks |
+| `createTaskList` | Creates a new task list on a card |
+| `createTask` | Creates a new task in a task list |
+| `updateTask` | Updates task (name, completion, assignee, position) |
+
+#### labels
+Manage labels on boards and cards.
+
+| Action | Description |
+|--------|-------------|
+| `create` | Creates a new label on a board |
+| `addToCard` | Adds a label to a card |
+
+#### cardMembers
+Manage card memberships.
+
+| Action | Description |
+|--------|-------------|
+| `add` | Assigns a user to a card |
+
+</details>
+
+<details>
+<summary><strong>Admin Tools (4 grouped tools, 18 operations)</strong> - Requires <code>ENABLE_ADMIN_TOOLS=true</code></summary>
+
+#### config
+Manage application configuration.
+
+| Action | Description |
+|--------|-------------|
+| `get` | Retrieves application configuration (SMTP settings) |
+| `update` | Updates application configuration |
+| `testSmtp` | Sends a test email to verify SMTP configuration |
+
+#### users
+Manage user accounts.
+
+| Action | Description |
+|--------|-------------|
+| `list` | Retrieves list of all users |
+| `create` | Creates a new user account |
+| `update` | Updates a user's profile |
+| `delete` | Deletes a user account |
+| `updateAvatar` | Updates a user's avatar image |
+| `updateEmail` | Updates a user's email address |
+| `updatePassword` | Updates a user's password |
+| `updateUsername` | Updates a user's username |
+| `createApiKey` | Generates an API key for a user |
+
+#### webhooks
+Manage webhooks for integrations.
+
+| Action | Description |
+|--------|-------------|
+| `list` | Retrieves all configured webhooks |
+| `create` | Creates a new webhook |
+| `update` | Updates a webhook's configuration |
+| `delete` | Deletes a webhook |
+
+#### projectManagers
+Manage project manager assignments.
+
+| Action | Description |
+|--------|-------------|
+| `add` | Adds a user as project manager |
+| `remove` | Removes a project manager |
+
+</details>
+
+<details>
+<summary><strong>Optional Tools (14 grouped tools, 54 operations)</strong> - Requires <code>ENABLE_OPTIONAL_TOOLS=true</code></summary>
+
+#### auth
+Authentication operations (typically handled by the server).
+
+| Action | Description |
+|--------|-------------|
+| `acceptTerms` | Accept terms during authentication flow |
+| `login` | Authenticate with email/password |
+| `logout` | Logout current user |
+| `exchangeOidc` | Exchange OIDC code for access token |
+| `revokePending` | Revoke pending authentication token |
+| `getTerms` | Retrieve terms and conditions |
+
+#### actions
+Retrieve action history.
+
+| Action | Description |
+|--------|-------------|
+| `getBoard` | Retrieves action history for a board |
+| `getCard` | Retrieves action history for a card |
+
+#### attachments
+Manage file attachments on cards.
+
+| Action | Description |
+|--------|-------------|
+| `create` | Creates an attachment on a card |
+| `update` | Updates attachment properties |
+| `delete` | Deletes an attachment |
+
+#### boardMembers
+Manage board memberships.
+
+| Action | Description |
+|--------|-------------|
+| `add` | Adds a user to a board |
+| `update` | Updates board membership role |
+| `remove` | Removes a user from a board |
+
+#### customFields
+Manage custom field groups and fields.
+
+| Action | Description |
+|--------|-------------|
+| `createBaseGroup` | Creates a base custom field group template |
+| `updateBaseGroup` | Updates a base custom field group |
+| `deleteBaseGroup` | Deletes a base custom field group |
+| `createBoardGroup` | Creates a custom field group on a board |
+| `createCardGroup` | Creates a custom field group on a card |
+| `getGroup` | Retrieves a custom field group with fields |
+| `updateGroup` | Updates a custom field group |
+| `deleteGroup` | Deletes a custom field group |
+| `createFieldInBase` | Creates a field in a base group |
+| `createFieldInGroup` | Creates a field in a group |
+| `updateField` | Updates a custom field |
+| `deleteField` | Deletes a custom field |
+| `setValue` | Sets a custom field value on a card |
+| `deleteValue` | Clears a custom field value |
+
+#### notifications
+Manage user notifications.
+
+| Action | Description |
+|--------|-------------|
+| `list` | Retrieves all unread notifications |
+| `get` | Retrieves a specific notification |
+| `markRead` | Marks a notification as read |
+| `markAllRead` | Marks all notifications as read |
+| `markCardRead` | Marks all notifications for a card as read |
+| `createUserService` | Creates user notification service |
+| `createBoardService` | Creates board notification service |
+| `updateService` | Updates a notification service |
+| `deleteService` | Deletes a notification service |
+| `testService` | Tests a notification service |
+
+#### backgroundImages
+Manage project background images.
+
+| Action | Description |
+|--------|-------------|
+| `upload` | Uploads a background image |
+| `delete` | Deletes a background image |
+
+#### cardExtras
+Extended card operations.
+
+| Action | Description |
+|--------|-------------|
+| `duplicate` | Duplicates a card with all content |
+
+#### commentExtras
+Extended comment operations.
+
+| Action | Description |
+|--------|-------------|
+| `update` | Updates a comment |
+| `delete` | Deletes a comment |
+
+#### listExtras
+Extended list operations.
+
+| Action | Description |
+|--------|-------------|
+| `clear` | Moves all cards in a list to trash |
+| `moveCards` | Moves all cards to another list |
+| `sort` | Sorts cards in a list |
+
+#### taskExtras
+Extended task operations.
+
+| Action | Description |
+|--------|-------------|
+| `updateTaskList` | Updates a task list |
+| `deleteTaskList` | Deletes a task list |
+| `deleteTask` | Deletes a task |
+
+#### labelExtras
+Extended label operations.
+
+| Action | Description |
+|--------|-------------|
+| `update` | Updates a label |
+| `delete` | Deletes a label |
+| `removeFromCard` | Removes a label from a card |
+
+#### cardMemberExtras
+Extended card membership operations.
+
+| Action | Description |
+|--------|-------------|
+| `remove` | Removes a user from a card |
+
+#### userInfo
+User information retrieval.
+
+| Action | Description |
+|--------|-------------|
+| `get` | Retrieves a user's profile |
+
+</details>
 
 ### Example .env File
 
@@ -173,6 +489,11 @@ PLANKA_BASE_URL=http://localhost:3000
 PLANKA_USERNAME=admin
 PLANKA_PASSWORD=your-secure-password
 MCP_TRANSPORT=stdio
+
+# Tool categories (all false by default - only core tools enabled)
+# ENABLE_ALL_TOOLS=true
+# ENABLE_ADMIN_TOOLS=true
+# ENABLE_OPTIONAL_TOOLS=true
 ```
 
 ---
@@ -185,7 +506,7 @@ MCP_TRANSPORT=stdio
 
 Add to your Claude Desktop configuration (`claude_desktop_config.json`):
 
-**Using npx:**
+**Using npx (core tools only - default):**
 ```json
 {
   "mcpServers": {
@@ -196,6 +517,24 @@ Add to your Claude Desktop configuration (`claude_desktop_config.json`):
         "PLANKA_BASE_URL": "http://localhost:3000",
         "PLANKA_USERNAME": "your-username",
         "PLANKA_PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+**Using npx with all tools enabled:**
+```json
+{
+  "mcpServers": {
+    "planka": {
+      "command": "npx",
+      "args": ["@chmald/planka-mcp"],
+      "env": {
+        "PLANKA_BASE_URL": "http://localhost:3000",
+        "PLANKA_USERNAME": "your-username",
+        "PLANKA_PASSWORD": "your-password",
+        "ENABLE_ALL_TOOLS": "true"
       }
     }
   }

@@ -1,6 +1,6 @@
 {
   "name": "@chmald/planka-mcp",
-  "version": "1.0.3",
+  "version": "2.0.0-dev",
   "description": "MCP server for Planka - Real-Time Collaborative Kanban Board",
   "main": "dist/server.js",
   "type": "module",
@@ -8,8 +8,7 @@
     "planka-mcp": "./dist/server.js"
   },
   "files": [
-    "dist",
-    "swagger.json"
+    "dist"
   ],
   "scripts": {
     "build": "tsc",

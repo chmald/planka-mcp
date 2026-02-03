@@ -7,11 +7,11 @@ import {
   ListToolsRequestSchema,
   Tool,
 } from "@modelcontextprotocol/sdk/types.js";
-import { readFileSync } from "node:fs";
 import { createServer, IncomingMessage, ServerResponse } from "node:http";
 import { request as undiciRequest } from "undici";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+
+// Import tool definitions
+import { getEnabledTools, toolCounts, GroupedToolDefinition } from "./tools/index.js";
 
 // ----- Configuration -----
 const PLANKA_BASE_URL = process.env.PLANKA_BASE_URL || "http://localhost:3000";
@@ -20,13 +20,10 @@ const PLANKA_PASSWORD = process.env.PLANKA_PASSWORD;
 const MCP_PORT = parseInt(process.env.MCP_PORT || "3001", 10);
 const MCP_TRANSPORT = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "sse"
 
-// ----- Load the OpenAPI spec -----
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-// Default path resolves relative to the package root (one level up from dist/)
-const defaultSpecPath = join(__dirname, "..", "swagger.json");
-const specPath = process.env.OPENAPI_SPEC_PATH || defaultSpecPath;
-const openapi = JSON.parse(readFileSync(specPath, "utf-8"));
+// Tool category configuration
+const ENABLE_ALL_TOOLS = process.env.ENABLE_ALL_TOOLS === "true";
+const ENABLE_ADMIN_TOOLS = process.env.ENABLE_ADMIN_TOOLS === "true";
+const ENABLE_OPTIONAL_TOOLS = process.env.ENABLE_OPTIONAL_TOOLS === "true";
 
 // ----- Token management -----
 let cachedToken: string | null = null;
@@ -75,104 +72,76 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
-function toolName(method: string, path: string, op: any): string {
-  return (op.operationId || `${method}_${path.replace(/[\/{}]/g, "_")}`).toLowerCase();
-}
-
-// ----- Build MCP tools from OpenAPI spec -----
-interface ToolDefinition {
+// ----- Build MCP tools from grouped tool definitions -----
+interface McpToolDefinition {
   tool: Tool;
-  method: string;
-  path: string;
-  requiresAuth: boolean;
+  groupedDef: GroupedToolDefinition;
 }
 
-function buildToolsFromOpenApi(): ToolDefinition[] {
-  const tools: ToolDefinition[] = [];
-  
-  for (const [path, methods] of Object.entries<any>(openapi.paths || {})) {
-    for (const method of Object.keys(methods)) {
-      if (method === "parameters") continue; // Skip path-level parameters
-      
-      const op = methods[method];
-      if (!op) continue;
-      
-      const name = toolName(method, path, op);
-      
-      // Check if this endpoint requires authentication
-      const requiresAuth = op.security === undefined || op.security?.length > 0;
-      
-      // Build input schema from OpenAPI parameters
-      const properties: Record<string, any> = {};
-      const required: string[] = [];
-      
-      // Extract path parameters
-      const pathParams = (op.parameters || []).filter((p: any) => p.in === "path");
-      const queryParams = (op.parameters || []).filter((p: any) => p.in === "query");
-      
-      if (pathParams.length > 0) {
-        properties.params = {
-          type: "object",
-          description: "Path parameters",
-          properties: Object.fromEntries(
-            pathParams.map((p: any) => [p.name, { type: p.schema?.type || "string", description: p.description }])
-          ),
-          required: pathParams.filter((p: any) => p.required).map((p: any) => p.name),
-        };
-      }
-      
-      if (queryParams.length > 0) {
-        properties.query = {
-          type: "object",
-          description: "Query parameters",
-          properties: Object.fromEntries(
-            queryParams.map((p: any) => [p.name, { type: p.schema?.type || "string", description: p.description }])
-          ),
-        };
-      }
-      
-      // Check for request body
-      if (op.requestBody) {
-        properties.body = {
-          type: "object",
-          description: "Request body",
-          additionalProperties: true,
-        };
-      }
+function buildTools(): McpToolDefinition[] {
+  const enabledTools = getEnabledTools({
+    enableAllTools: ENABLE_ALL_TOOLS,
+    enableAdminTools: ENABLE_ADMIN_TOOLS,
+    enableOptionalTools: ENABLE_OPTIONAL_TOOLS,
+  });
 
-      const description = op.description || op.summary || `Calls ${method.toUpperCase()} ${path}`;
-
-      const tool: Tool = {
-        name,
-        description,
-        inputSchema: {
-          type: "object",
-          properties,
-          required,
-        },
-      };
-
-      tools.push({ tool, method, path, requiresAuth });
-    }
-  }
-  
-  return tools;
+  return enabledTools.map((def: GroupedToolDefinition) => ({
+    tool: {
+      name: def.name,
+      description: def.description,
+      inputSchema: def.inputSchema,
+    },
+    groupedDef: def,
+  }));
 }
 
-// ----- Execute API call -----
-async function executeApiCall(
-  method: string,
-  path: string,
-  requiresAuth: boolean,
+// ----- Execute API call for grouped tools -----
+async function executeGroupedApiCall(
+  groupedDef: GroupedToolDefinition,
   input: any
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
+    const action = input?.action;
+    if (!action) {
+      return { success: false, error: "Missing required 'action' parameter" };
+    }
+
+    const operation = groupedDef.operations[action];
+    if (!operation) {
+      const validActions = Object.keys(groupedDef.operations).join(", ");
+      return { success: false, error: `Invalid action '${action}'. Valid actions: ${validActions}` };
+    }
+
     // Construct URL with path parameters
-    let actualPath = path;
-    if (input?.params) {
-      for (const [k, v] of Object.entries(input.params)) {
-        actualPath = actualPath.replace(`{${k}}`, encodeURIComponent(String(v)));
+    let actualPath = operation.path;
+    
+    // Replace path parameters from 'id' field or 'data' field
+    const pathParams = actualPath.match(/\{(\w+)\}/g) || [];
+    for (const param of pathParams) {
+      const paramName = param.slice(1, -1); // Remove { and }
+      let value: string | undefined;
+      
+      // Check common parameter mappings
+      if (paramName === "id" && input.id) {
+        value = input.id;
+      } else if (input.id && ["projectId", "boardId", "listId", "cardId", "userId", "taskListId", "baseCustomFieldGroupId", "customFieldGroupId", "customFieldId"].includes(paramName)) {
+        value = input.id;
+      } else if (input.data?.[paramName]) {
+        value = input.data[paramName];
       }
+      
+      if (value) {
+        actualPath = actualPath.replace(param, encodeURIComponent(String(value)));
+      }
+    }
+
+    // Check if there are still unresolved parameters
+    const unresolvedParams = actualPath.match(/\{(\w+)\}/g);
+    if (unresolvedParams) {
+      return { 
+        success: false, 
+        error: `Missing required path parameters: ${unresolvedParams.join(", ")}. Provide them via 'id' or 'data'.` 
+      };
     }
 
     const url = new URL(`${PLANKA_BASE_URL}/api${actualPath}`);
@@ -188,12 +157,13 @@ async function executeApiCall(
       }
     }
 
-    const methodUpper = method.toUpperCase();
+    const methodUpper = operation.method;
     const headers: Record<string, string> = {
       "Accept": "application/json",
     };
 
-    // Add authentication header if required
+    // Add authentication header if required (default to true)
+    const requiresAuth = operation.requiresAuth !== false;
     if (requiresAuth) {
       const token = await getAccessToken();
       headers["Authorization"] = `Bearer ${token}`;
@@ -201,9 +171,9 @@ async function executeApiCall(
 
     // Handle request body
     let body: string | undefined = undefined;
-    if (["POST", "PUT", "PATCH"].includes(methodUpper) && input?.body !== undefined) {
+    if (["POST", "PUT", "PATCH"].includes(methodUpper) && input?.data !== undefined) {
       headers["Content-Type"] = "application/json";
-      body = JSON.stringify(input.body);
+      body = JSON.stringify(input.data);
     }
 
     const res = await undiciRequest(url, { method: methodUpper, headers, body });
@@ -226,7 +196,7 @@ async function executeApiCall(
       if (res.statusCode === 401 && requiresAuth && cachedToken) {
         cachedToken = null;
         tokenExpiry = 0;
-        return executeApiCall(method, path, requiresAuth, input);
+        return executeGroupedApiCall(groupedDef, input);
       }
       
       return {
@@ -243,8 +213,16 @@ async function executeApiCall(
 }
 
 // ----- Initialize MCP Server -----
-const toolDefinitions = buildToolsFromOpenApi();
+const toolDefinitions = buildTools();
 const toolMap = new Map(toolDefinitions.map(t => [t.tool.name, t]));
+
+// Log tool configuration
+console.error(`Tool configuration (grouped):`);
+console.error(`  - Core: ${toolCounts.core} tools (${toolCounts.coreOperations} operations)`);
+console.error(`  - Admin: ${toolCounts.admin} tools (${toolCounts.adminOperations} operations) - ${ENABLE_ADMIN_TOOLS ? "enabled" : "disabled"}`);
+console.error(`  - Optional: ${toolCounts.optional} tools (${toolCounts.optionalOperations} operations) - ${ENABLE_OPTIONAL_TOOLS ? "enabled" : "disabled"}`);
+console.error(`  - Total available: ${toolCounts.total} tools (${toolCounts.totalOperations} operations)`);
+console.error(`  - Currently enabled: ${toolDefinitions.length} tools`);
 
 function createMcpServer() {
   const server = new McpServer(
@@ -278,12 +256,7 @@ function createMcpServer() {
       };
     }
 
-    const result = await executeApiCall(
-      toolDef.method,
-      toolDef.path,
-      toolDef.requiresAuth,
-      args
-    );
+    const result = await executeGroupedApiCall(toolDef.groupedDef, args);
 
     if (result.success) {
       return {
@@ -412,7 +385,12 @@ async function main() {
         res.end(JSON.stringify({ 
           status: "ok", 
           activeClients: activeTransports.size,
-          toolsAvailable: toolDefinitions.length 
+          toolsAvailable: toolDefinitions.length,
+          toolCounts: {
+            core: { tools: toolCounts.core, operations: toolCounts.coreOperations },
+            admin: ENABLE_ADMIN_TOOLS ? { tools: toolCounts.admin, operations: toolCounts.adminOperations } : { tools: 0, operations: 0 },
+            optional: ENABLE_OPTIONAL_TOOLS ? { tools: toolCounts.optional, operations: toolCounts.optionalOperations } : { tools: 0, operations: 0 },
+          },
         }));
       } else {
         res.writeHead(404, { "Content-Type": "application/json" });
