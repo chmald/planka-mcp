@@ -71,7 +71,6 @@ docker run -d \
 - [Configuration](#configuration)
 - [Client Setup](#client-setup)
 - [Docker Deployment](#docker-deployment)
-- [Available Tools](#available-tools)
 - [Development](#development)
 - [Publishing](#publishing)
 - [Versioning](#versioning)
@@ -768,68 +767,13 @@ When running in SSE mode:
 |----------|--------|-------------|
 | `/sse` | GET | Establish SSE connection (returns session ID) |
 | `/messages?sessionId=<id>` | POST | Send messages to the server |
-| `/health` | GET | Health check with active client count |
+| `/health` | GET | Health check with active client count and tool counts |
 
 **Health check example:**
 ```bash
 curl http://localhost:3001/health
-# {"status":"ok","activeClients":2,"toolsAvailable":80}
+# {"status":"ok","activeClients":2,"toolsAvailable":9,"toolCounts":{"core":{"tools":9,"operations":28},"admin":{"tools":0,"operations":0},"optional":{"tools":0,"operations":0}}}
 ```
-
----
-
-## Available Tools
-
-The server automatically generates tools from the Planka OpenAPI specification (80+ tools). Key operations include:
-
-### Projects
-- `getprojects` - Get all accessible projects
-- `createproject` - Create a new project
-- `getproject` - Get project details
-- `updateproject` - Update a project
-- `deleteproject` - Delete a project
-
-### Boards
-- `createboard` - Create a board within a project
-- `getboard` - Get board details with lists and cards
-- `updateboard` - Update a board
-- `deleteboard` - Delete a board
-
-### Lists
-- `createlist` - Create a list within a board
-- `getlist` - Get list details
-- `updatelist` - Update a list
-- `deletelist` - Delete a list
-- `sortlist` - Sort cards in a list
-
-### Cards
-- `createcard` - Create a card within a list
-- `getcard` - Get card details
-- `updatecard` - Update a card
-- `deletecard` - Delete a card
-- `duplicatecard` - Duplicate a card
-
-### Tasks
-- `createtasklist` - Create a task list on a card
-- `createtask` - Create a task within a task list
-- `updatetask` - Update a task
-- `deletetask` - Delete a task
-
-### Comments
-- `createcomment` - Add a comment to a card
-- `getcomments` - Get comments on a card
-- `updatecomments` - Update a comment
-- `deletecomment` - Delete a comment
-
-### Labels
-- `createlabel` - Create a label on a board
-- `createcardlabel` - Add a label to a card
-- `deletecardlabel` - Remove a label from a card
-
-### Users & Authentication
-- `getusers` - Get all users (admin only)
-- `createuser` - Create a user (admin only)
-- `getconfig` - Get application configuration
 
 ---
 
