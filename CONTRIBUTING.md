@@ -12,17 +12,32 @@ Thank you for your interest in contributing!
 ## Development
 
 ```bash
-# Run in development mode
+# Run in development mode (stdio)
 npm run dev
 
-# Run in SSE mode for testing multi-client
+# Run in development mode (SSE)
 npm run dev:sse
 
-# Build
+# Build for production
 npm run build
 
 # Run built version
-npm start
+npm start          # stdio mode
+npm run start:sse  # SSE mode
+```
+
+### Building Docker Image Locally
+
+```bash
+# Build with default settings
+docker build -t planka-mcp:local .
+
+# Build with version metadata
+docker build \
+  --build-arg VERSION=1.0.0 \
+  --build-arg BUILD_DATE=$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+  --build-arg VCS_REF=$(git rev-parse --short HEAD) \
+  -t planka-mcp:1.0.0 .
 ```
 
 ## Code Style
@@ -45,6 +60,42 @@ When reporting issues, please include:
 - Operating system
 - Steps to reproduce
 - Expected vs actual behavior
+
+---
+
+## Publishing
+
+### Publishing to npm
+
+```bash
+# Login to npm
+npm login
+
+# Build and publish
+npm run build
+npm publish --access public
+```
+
+### Creating a Release
+
+1. Update version in `package.json`
+2. Commit: `git commit -m "Release v1.0.0"`
+3. Tag and push: `git tag v1.0.0 && git push origin v1.0.0`
+
+GitHub Actions will automatically:
+- Build multi-arch Docker images
+- Push to Docker Hub with appropriate tags
+- Generate SBOM
+
+### Docker Tags
+
+When you push `v1.2.3`:
+- `chmald/planka-mcp:1.2.3`
+- `chmald/planka-mcp:1.2`
+- `chmald/planka-mcp:1`
+- `chmald/planka-mcp:latest`
+
+---
 
 ## Security
 
