@@ -10,7 +10,6 @@ RUN npm ci
 # Copy source and build
 COPY tsconfig.json ./
 COPY src/ ./src/
-COPY swagger.json ./
 RUN npm run build
 
 # Production stage
@@ -40,7 +39,6 @@ RUN npm ci --only=production && npm cache clean --force
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist/ ./dist/
-COPY --from=builder /app/swagger.json ./
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S mcpuser && \

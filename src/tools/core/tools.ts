@@ -1,0 +1,397 @@
+import { GroupedToolDefinition, buildGroupedSchema } from "../types.js";
+
+/**
+ * Projects tool - manages Planka projects
+ */
+export const projectsTool: GroupedToolDefinition = {
+  name: "projects",
+  description: "Manage Planka projects. Projects are top-level containers for boards.",
+  operations: {
+    list: {
+      method: "GET",
+      path: "/projects",
+      description: "List all projects accessible to the current user",
+    },
+    get: {
+      method: "GET",
+      path: "/projects/{id}",
+      description: "Get detailed project information including boards and memberships",
+    },
+    create: {
+      method: "POST",
+      path: "/projects",
+      description: "Create a new project (you become the project manager)",
+    },
+    update: {
+      method: "PATCH",
+      path: "/projects/{id}",
+      description: "Update project settings",
+    },
+    delete: {
+      method: "DELETE",
+      path: "/projects/{id}",
+      description: "Delete a project and all its data",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["list", "get", "create", "update", "delete"],
+    {
+      list: "List all accessible projects",
+      get: "Get project details by ID",
+      create: "Create a new project",
+      update: "Update project settings",
+      delete: "Delete a project",
+    },
+    {
+      id: {
+        description: "Project ID",
+        requiredFor: ["get", "update", "delete"],
+      },
+      data: {
+        description: "Project data: { name: string, description?: string, backgroundType?: 'gradient'|'image', backgroundGradient?: string }",
+        requiredFor: ["create", "update"],
+      },
+    }
+  ),
+};
+
+/**
+ * Boards tool - manages boards within projects
+ */
+export const boardsTool: GroupedToolDefinition = {
+  name: "boards",
+  description: "Manage Planka boards. Boards contain lists and cards for organizing work.",
+  operations: {
+    get: {
+      method: "GET",
+      path: "/boards/{id}",
+      description: "Get board with lists, cards, labels, and memberships",
+    },
+    create: {
+      method: "POST",
+      path: "/projects/{projectId}/boards",
+      description: "Create a new board in a project",
+    },
+    update: {
+      method: "PATCH",
+      path: "/boards/{id}",
+      description: "Update board settings",
+    },
+    delete: {
+      method: "DELETE",
+      path: "/boards/{id}",
+      description: "Delete a board and all its data",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["get", "create", "update", "delete"],
+    {
+      get: "Get board details by ID",
+      create: "Create a new board in a project",
+      update: "Update board settings",
+      delete: "Delete a board",
+    },
+    {
+      id: {
+        description: "Board ID (for get, update, delete) or Project ID (for create, use projectId in data)",
+        requiredFor: ["get", "update", "delete"],
+      },
+      data: {
+        description: "Board data: { name: string, projectId?: string (for create), position?: number, defaultView?: 'kanban'|'grid'|'list' }",
+        requiredFor: ["create", "update"],
+      },
+    }
+  ),
+};
+
+/**
+ * Lists tool - manages lists within boards
+ */
+export const listsTool: GroupedToolDefinition = {
+  name: "lists",
+  description: "Manage Planka lists. Lists are columns on a board that contain cards.",
+  operations: {
+    get: {
+      method: "GET",
+      path: "/lists/{id}",
+      description: "Get a list with its cards",
+    },
+    create: {
+      method: "POST",
+      path: "/boards/{boardId}/lists",
+      description: "Create a new list on a board",
+    },
+    update: {
+      method: "PATCH",
+      path: "/lists/{id}",
+      description: "Update list name, position, or type",
+    },
+    delete: {
+      method: "DELETE",
+      path: "/lists/{id}",
+      description: "Delete a list (cards move to trash)",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["get", "create", "update", "delete"],
+    {
+      get: "Get list details and cards",
+      create: "Create a new list on a board",
+      update: "Update list settings",
+      delete: "Delete a list",
+    },
+    {
+      id: {
+        description: "List ID (for get, update, delete) or Board ID (for create, use boardId in data)",
+        requiredFor: ["get", "update", "delete"],
+      },
+      data: {
+        description: "List data: { name: string, boardId?: string (for create), position?: number, type?: 'active'|'closed' }",
+        requiredFor: ["create", "update"],
+      },
+    }
+  ),
+};
+
+/**
+ * Cards tool - manages cards within lists
+ */
+export const cardsTool: GroupedToolDefinition = {
+  name: "cards",
+  description: "Manage Planka cards. Cards are individual work items on a board.",
+  operations: {
+    list: {
+      method: "GET",
+      path: "/cards",
+      description: "Search cards across all accessible boards",
+    },
+    get: {
+      method: "GET",
+      path: "/cards/{id}",
+      description: "Get card with task lists, attachments, and custom fields",
+    },
+    create: {
+      method: "POST",
+      path: "/lists/{listId}/cards",
+      description: "Create a new card in a list",
+    },
+    update: {
+      method: "PATCH",
+      path: "/cards/{id}",
+      description: "Update card properties (can move between lists)",
+    },
+    delete: {
+      method: "DELETE",
+      path: "/cards/{id}",
+      description: "Delete a card permanently",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["list", "get", "create", "update", "delete"],
+    {
+      list: "Search/list cards with optional filters",
+      get: "Get card details by ID",
+      create: "Create a new card",
+      update: "Update card properties",
+      delete: "Delete a card",
+    },
+    {
+      id: {
+        description: "Card ID (for get, update, delete) or List ID (for create, use listId in data)",
+        requiredFor: ["get", "update", "delete"],
+      },
+      data: {
+        description: "Card data: { name: string, listId?: string (for create/move), description?: string, dueDate?: string, position?: number }",
+        requiredFor: ["create", "update"],
+      },
+      query: {
+        boardId: { type: "string", description: "Filter by board ID (for list)" },
+        listId: { type: "string", description: "Filter by list ID (for list)" },
+        search: { type: "string", description: "Search query for card names (for list)" },
+      },
+    }
+  ),
+};
+
+/**
+ * Comments tool - manages comments on cards
+ */
+export const commentsTool: GroupedToolDefinition = {
+  name: "comments",
+  description: "Manage comments on Planka cards.",
+  operations: {
+    list: {
+      method: "GET",
+      path: "/cards/{cardId}/comments",
+      description: "Get comments for a card with pagination",
+    },
+    create: {
+      method: "POST",
+      path: "/cards/{cardId}/comments",
+      description: "Add a comment to a card",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["list", "create"],
+    {
+      list: "Get comments for a card",
+      create: "Add a comment to a card",
+    },
+    {
+      id: {
+        description: "Card ID to get/add comments",
+        requiredFor: ["list", "create"],
+      },
+      data: {
+        description: "Comment data: { text: string }",
+        requiredFor: ["create"],
+      },
+      query: {
+        beforeId: { type: "string", description: "Get comments before this ID (pagination)" },
+      },
+    }
+  ),
+};
+
+/**
+ * Tasks tool - manages task lists and tasks on cards
+ */
+export const tasksTool: GroupedToolDefinition = {
+  name: "tasks",
+  description: "Manage task lists and tasks on Planka cards. Tasks are checklist items within a card.",
+  operations: {
+    getList: {
+      method: "GET",
+      path: "/task-lists/{id}",
+      description: "Get a task list with all its tasks",
+    },
+    createList: {
+      method: "POST",
+      path: "/cards/{cardId}/task-lists",
+      description: "Create a new task list on a card",
+    },
+    create: {
+      method: "POST",
+      path: "/task-lists/{taskListId}/tasks",
+      description: "Create a new task in a task list",
+    },
+    update: {
+      method: "PATCH",
+      path: "/tasks/{id}",
+      description: "Update task (name, completion status, assignee)",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["getList", "createList", "create", "update"],
+    {
+      getList: "Get a task list by ID",
+      createList: "Create a task list on a card",
+      create: "Create a task in a task list",
+      update: "Update a task",
+    },
+    {
+      id: {
+        description: "Task List ID (for getList), Card ID (for createList), Task List ID (for create, use taskListId in data), or Task ID (for update)",
+        requiredFor: ["getList", "createList", "create", "update"],
+      },
+      data: {
+        description: "Data: { name: string, cardId?: string (for createList), taskListId?: string (for create), isCompleted?: boolean (for update), assigneeUserId?: string }",
+        requiredFor: ["createList", "create", "update"],
+      },
+    }
+  ),
+};
+
+/**
+ * Labels tool - manages labels on boards and cards
+ */
+export const labelsTool: GroupedToolDefinition = {
+  name: "labels",
+  description: "Manage labels on Planka boards and cards. Labels help categorize and filter cards.",
+  operations: {
+    create: {
+      method: "POST",
+      path: "/boards/{boardId}/labels",
+      description: "Create a new label on a board",
+    },
+    addToCard: {
+      method: "POST",
+      path: "/cards/{cardId}/labels",
+      description: "Add a label to a card",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["create", "addToCard"],
+    {
+      create: "Create a label on a board",
+      addToCard: "Add a label to a card",
+    },
+    {
+      id: {
+        description: "Board ID (for create) or Card ID (for addToCard)",
+        requiredFor: ["create", "addToCard"],
+      },
+      data: {
+        description: "Label data: { name: string, color: string, boardId?: string } for create, or { labelId: string } for addToCard. Colors: berry-red, pumpkin-orange, lagoon-blue, pink-tulip, light-mud, orange-peel, bright-moss, antique-blue, dark-granite, turquoise-sea",
+        requiredFor: ["create", "addToCard"],
+      },
+    }
+  ),
+};
+
+/**
+ * Card Members tool - manages card memberships
+ */
+export const cardMembersTool: GroupedToolDefinition = {
+  name: "cardMembers",
+  description: "Manage user assignments on Planka cards.",
+  operations: {
+    add: {
+      method: "POST",
+      path: "/cards/{cardId}/memberships",
+      description: "Assign a user to a card",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["add"],
+    {
+      add: "Assign a user to a card",
+    },
+    {
+      id: {
+        description: "Card ID to assign user to",
+        requiredFor: ["add"],
+      },
+      data: {
+        description: "Membership data: { userId: string }",
+        requiredFor: ["add"],
+      },
+    }
+  ),
+};
+
+/**
+ * Bootstrap tool - retrieves application initialization data
+ */
+export const bootstrapTool: GroupedToolDefinition = {
+  name: "bootstrap",
+  description: "Get Planka application bootstrap data including current user, projects, boards, and notifications.",
+  operations: {
+    get: {
+      method: "GET",
+      path: "/",
+      description: "Get application bootstrap data",
+    },
+  },
+  inputSchema: {
+    type: "object",
+    properties: {
+      action: {
+        type: "string",
+        enum: ["get"],
+        description: "Action: 'get' - Retrieve bootstrap data",
+      },
+    },
+    required: ["action"],
+  },
+};

@@ -1,6 +1,6 @@
 {
   "name": "@chmald/planka-mcp",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "MCP server for Planka - Real-Time Collaborative Kanban Board",
   "main": "dist/server.js",
   "type": "module",
@@ -8,8 +8,7 @@
     "planka-mcp": "./dist/server.js"
   },
   "files": [
-    "dist",
-    "swagger.json"
+    "dist"
   ],
   "scripts": {
     "build": "tsc",
@@ -18,7 +17,11 @@
     "dev": "tsx src/server.ts",
     "dev:sse": "cross-env MCP_TRANSPORT=sse tsx src/server.ts",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npm run build && node --import tsx --test test/*.test.ts",
+    "test:tools": "node --import tsx --test test/tools.test.ts",
+    "test:build": "npm run build && node --import tsx --test test/build.test.ts",
+    "test:server": "node --import tsx --test test/server.test.ts",
+    "test:ci": "npm run build && node --import tsx --test test/*.test.ts"
   },
   "keywords": [
     "mcp",
