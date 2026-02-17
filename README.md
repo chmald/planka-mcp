@@ -123,11 +123,11 @@ Each tool uses an `action` parameter. Example: `{ "action": "list" }` or `{ "act
 | `projects` | `list`, `get`, `create`, `update`, `delete` |
 | `boards` | `get`, `create`, `update`, `delete` |
 | `lists` | `get`, `create`, `update`, `delete` |
-| `cards` | `search`, `get`, `create`, `update`, `delete` |
+| `cards` | `list`, `get`, `create`, `update`, `delete` |
 | `comments` | `list`, `create` |
-| `tasks` | `getTaskList`, `createTaskList`, `createTask`, `updateTask` |
-| `labels` | `create`, `addToCard` |
-| `cardMembers` | `add` |
+| `tasks` | `getList`, `createList`, `create`, `update` |
+| `labels` | `create`, `update`, `delete`, `addToCard`, `removeFromCard` |
+| `cardMembers` | `add`, `remove` |
 
 </details>
 
@@ -151,12 +151,12 @@ Each tool uses an `action` parameter. Example: `{ "action": "list" }` or `{ "act
 | `attachments` | `create`, `update`, `delete` |
 | `boardMembers` | `add`, `update`, `remove` |
 | `customFields` | `createBaseGroup`, `createField`, `setValue`, etc. |
-| `notifications` | `list`, `get`, `markRead`, `markAllRead` |
-| `actions` | `getBoard`, `getCard` |
+| `notifications` | `list`, `get`, `markRead`, `markAllRead`, `markCardRead`, `createUserService`, `createBoardService`, `updateService`, `deleteService`, `testService` |
+| `actions` | `boardActions`, `cardActions` |
 | `cardExtras` | `duplicate` |
 | `commentExtras` | `update`, `delete` |
 | `listExtras` | `clear`, `moveCards`, `sort` |
-| `taskExtras` | `updateTaskList`, `deleteTaskList`, `deleteTask` |
+| `taskExtras` | `updateList`, `deleteList`, `deleteTask` |
 | `labelExtras` | `update`, `delete`, `removeFromCard` |
 | `cardMemberExtras` | `remove` |
 | `backgroundImages` | `upload`, `delete` |

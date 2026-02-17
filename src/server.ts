@@ -228,7 +228,7 @@ function createMcpServer() {
   const server = new McpServer(
     {
       name: "planka-mcp",
-      version: "1.0.0",
+      version: "2.0.2",
     },
     {
       capabilities: {

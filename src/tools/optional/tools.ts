@@ -32,7 +32,7 @@ export const authTool: GroupedToolDefinition = {
     },
     revokePending: {
       method: "POST",
-      path: "/access-tokens/revoke-pending",
+      path: "/access-tokens/revoke-pending-token",
       requiresAuth: false,
       description: "Revoke pending authentication token",
     },
@@ -157,7 +157,7 @@ export const boardMembersTool: GroupedToolDefinition = {
   operations: {
     add: {
       method: "POST",
-      path: "/boards/{boardId}/memberships",
+      path: "/boards/{boardId}/board-memberships",
       description: "Add a user to a board",
     },
     update: {
@@ -264,12 +264,12 @@ export const customFieldsTool: GroupedToolDefinition = {
     // Field values
     setValue: {
       method: "PATCH",
-      path: "/cards/{cardId}/custom-field-groups/{customFieldGroupId}/custom-fields/{customFieldId}/value",
+      path: "/cards/{cardId}/custom-field-values/customFieldGroupId:{customFieldGroupId}:customFieldId:{customFieldId}",
       description: "Set a custom field value on a card",
     },
     clearValue: {
       method: "DELETE",
-      path: "/cards/{cardId}/custom-field-groups/{customFieldGroupId}/custom-fields/{customFieldId}/value",
+      path: "/cards/{cardId}/custom-field-value/customFieldGroupId:{customFieldGroupId}:customFieldId:{customFieldId}",
       description: "Clear a custom field value",
     },
   },
@@ -529,7 +529,7 @@ export const listExtrasTool: GroupedToolDefinition = {
         requiredFor: ["clear", "moveCards", "sort"],
       },
       data: {
-        description: "Options: { listId?: string (target for moveCards), type?: 'name'|'dueDate'|'createdAt' (for sort) }",
+        description: "Options: { listId?: string (target for moveCards), fieldName?: 'name'|'dueDate'|'createdAt' (for sort), order?: 'asc'|'desc' (for sort) }",
         requiredFor: ["moveCards", "sort"],
       },
     }
@@ -598,7 +598,7 @@ export const labelExtrasTool: GroupedToolDefinition = {
     },
     removeFromCard: {
       method: "DELETE",
-      path: "/card-labels/{id}",
+      path: "/cards/{cardId}/card-labels/labelId:{labelId}",
       description: "Remove a label from a card",
     },
   },
@@ -611,12 +611,12 @@ export const labelExtrasTool: GroupedToolDefinition = {
     },
     {
       id: {
-        description: "Label ID (for update, delete) or Card-Label ID (for removeFromCard)",
+        description: "Label ID (for update, delete) or Card ID (for removeFromCard)",
         requiredFor: ["update", "delete", "removeFromCard"],
       },
       data: {
-        description: "Label data: { name?: string, color?: string, position?: number }",
-        requiredFor: ["update"],
+        description: "Label data: { name?: string, color?: string, position?: number } for update; { labelId: string, cardId: string } for removeFromCard",
+        requiredFor: ["update", "removeFromCard"],
       },
     }
   ),
@@ -631,7 +631,7 @@ export const cardMemberExtrasTool: GroupedToolDefinition = {
   operations: {
     remove: {
       method: "DELETE",
-      path: "/card-memberships/{id}",
+      path: "/cards/{cardId}/card-memberships/userId:{userId}",
       description: "Remove a user from a card",
     },
   },
@@ -642,7 +642,11 @@ export const cardMemberExtrasTool: GroupedToolDefinition = {
     },
     {
       id: {
-        description: "Card Membership ID",
+        description: "Card ID",
+        requiredFor: ["remove"],
+      },
+      data: {
+        description: "Membership data: { userId: string, cardId: string }",
         requiredFor: ["remove"],
       },
     }

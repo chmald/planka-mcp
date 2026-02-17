@@ -6,7 +6,7 @@
  * - Admin: Administrative functions requiring admin privileges - 4 tools
  * - Optional: Extended functionality for advanced use cases - 14 tools
  * 
- * Total: 27 grouped tools covering 100 API operations
+ * Total: 27 grouped tools covering 104 API operations
  */
 
 export { GroupedToolDefinition, ToolOperation, ToolCategory, buildGroupedSchema } from "./types.js";

@@ -162,8 +162,8 @@ export const cardsTool: GroupedToolDefinition = {
   operations: {
     list: {
       method: "GET",
-      path: "/cards",
-      description: "Search cards across all accessible boards",
+      path: "/lists/{listId}/cards",
+      description: "Get cards from a list with filtering, search, and pagination",
     },
     get: {
       method: "GET",
@@ -189,7 +189,7 @@ export const cardsTool: GroupedToolDefinition = {
   inputSchema: buildGroupedSchema(
     ["list", "get", "create", "update", "delete"],
     {
-      list: "Search/list cards with optional filters",
+      list: "Get cards from a list (requires listId)",
       get: "Get card details by ID",
       create: "Create a new card",
       update: "Update card properties",
@@ -197,17 +197,17 @@ export const cardsTool: GroupedToolDefinition = {
     },
     {
       id: {
-        description: "Card ID (for get, update, delete) or List ID (for create, use listId in data)",
-        requiredFor: ["get", "update", "delete"],
+        description: "Card ID (for get, update, delete) or List ID (for list, create)",
+        requiredFor: ["list", "get", "update", "delete"],
       },
       data: {
-        description: "Card data: { name: string, listId?: string (for create/move), description?: string, dueDate?: string, position?: number }",
+        description: "Card data: { name: string, type?: 'project'|'story', listId?: string (for create/move), description?: string, dueDate?: string, isDueCompleted?: boolean, position?: number, stopwatch?: { startedAt: string, total: number } }",
         requiredFor: ["create", "update"],
       },
       query: {
-        boardId: { type: "string", description: "Filter by board ID (for list)" },
-        listId: { type: "string", description: "Filter by list ID (for list)" },
-        search: { type: "string", description: "Search query for card names (for list)" },
+        search: { type: "string", description: "Search term to filter cards" },
+        userIds: { type: "string", description: "Comma-separated user IDs to filter by" },
+        labelIds: { type: "string", description: "Comma-separated label IDs to filter by" },
       },
     }
   ),
@@ -366,23 +366,29 @@ export const cardMembersTool: GroupedToolDefinition = {
   operations: {
     add: {
       method: "POST",
-      path: "/cards/{cardId}/memberships",
+      path: "/cards/{cardId}/card-memberships",
       description: "Assign a user to a card",
+    },
+    remove: {
+      method: "DELETE",
+      path: "/cards/{cardId}/card-memberships/userId:{userId}",
+      description: "Remove a user from a card",
     },
   },
   inputSchema: buildGroupedSchema(
-    ["add"],
+    ["add", "remove"],
     {
       add: "Assign a user to a card",
+      remove: "Remove a user from a card",
     },
     {
       id: {
-        description: "Card ID to assign user to",
-        requiredFor: ["add"],
+        description: "Card ID",
+        requiredFor: ["add", "remove"],
       },
       data: {
         description: "Membership data: { userId: string }",
-        requiredFor: ["add"],
+        requiredFor: ["add", "remove"],
       },
     }
   ),
@@ -397,7 +403,7 @@ export const bootstrapTool: GroupedToolDefinition = {
   operations: {
     get: {
       method: "GET",
-      path: "/",
+      path: "/bootstrap",
       description: "Get application bootstrap data",
     },
   },

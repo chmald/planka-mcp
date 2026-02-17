@@ -176,7 +176,7 @@ export const projectManagersTool: GroupedToolDefinition = {
   operations: {
     add: {
       method: "POST",
-      path: "/projects/{projectId}/managers",
+      path: "/projects/{projectId}/project-managers",
       description: "Add a user as project manager",
     },
     remove: {
