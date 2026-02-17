@@ -314,26 +314,44 @@ export const labelsTool: GroupedToolDefinition = {
       path: "/boards/{boardId}/labels",
       description: "Create a new label on a board",
     },
+    update: {
+      method: "PATCH",
+      path: "/labels/{id}",
+      description: "Update a label",
+    },
+    delete: {
+      method: "DELETE",
+      path: "/labels/{id}",
+      description: "Delete a label",
+    },
     addToCard: {
       method: "POST",
-      path: "/cards/{cardId}/labels",
+      path: "/cards/{cardId}/card-labels",
       description: "Add a label to a card",
+    },
+    removeFromCard: {
+      method: "DELETE",
+      path: "/cards/{cardId}/card-labels/labelId:{labelId}",
+      description: "Remove a label from a card",
     },
   },
   inputSchema: buildGroupedSchema(
-    ["create", "addToCard"],
+    ["create", "update", "delete", "addToCard", "removeFromCard"],
     {
       create: "Create a label on a board",
+      update: "Update a label's name, color, or position",
+      delete: "Delete a label from a board",
       addToCard: "Add a label to a card",
+      removeFromCard: "Remove a label from a card",
     },
     {
       id: {
-        description: "Board ID (for create) or Card ID (for addToCard)",
-        requiredFor: ["create", "addToCard"],
+        description: "Board ID (for create), Label ID (for update, delete), or Card ID (for addToCard, removeFromCard)",
+        requiredFor: ["create", "update", "delete", "addToCard", "removeFromCard"],
       },
       data: {
-        description: "Label data: { name: string, color: string, boardId?: string } for create, or { labelId: string } for addToCard. Colors: berry-red, pumpkin-orange, lagoon-blue, pink-tulip, light-mud, orange-peel, bright-moss, antique-blue, dark-granite, turquoise-sea",
-        requiredFor: ["create", "addToCard"],
+        description: "Label data: { name?: string, color: string, position: number } for create/update, { labelId: string } for addToCard/removeFromCard. Colors: muddy-grey, autumn-leafs, morning-sky, antique-blue, egg-yellow, desert-sand, dark-granite, fresh-salad, lagoon-blue, midnight-blue, light-orange, pumpkin-orange, light-concrete, sunny-grass, navy-blue, lilac-eyes, apricot-red, orange-peel, silver-glint, bright-moss, deep-ocean, summer-sky, berry-red, light-cocoa, grey-stone, tank-green, coral-green, sugar-plum, pink-tulip, shady-rust, wet-rock, wet-moss, turquoise-sea, lavender-fields, piggy-red, light-mud, gun-metal, modern-green, french-coast, sweet-lilac, red-burgundy, pirate-gold",
+        requiredFor: ["create", "update", "addToCard", "removeFromCard"],
       },
     }
   ),
