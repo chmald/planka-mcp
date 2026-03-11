@@ -96,6 +96,7 @@ jobs:
             maintainer=Christopher Maldonado <chmald@microsoft.com>
 
       - name: Build and push Docker image
+        id: docker-build
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -124,8 +125,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
-          artifact-name: sbom-sha-${{ github.sha }}.spdx.json
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.docker-build.outputs.digest }}
+          artifact-name: sbom-${{ github.run_id }}.spdx.json
           output-file: ./sbom.spdx.json
 
       - name: Upload SBOM artifact
