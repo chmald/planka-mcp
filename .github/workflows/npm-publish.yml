@@ -1,8 +1,9 @@
 name: Publish to npm
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       dry-run:
@@ -40,7 +41,19 @@ jobs:
 
       - name: Run tests
         run: npm test
-        continue-on-error: true
+
+      - name: Validate tag version matches package version
+        if: ${{ github.event_name == 'push' }}
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(npm pkg get version | tr -d '"')
+
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "❌ Tag version ($TAG_VERSION) does not match package version ($PKG_VERSION)."
+            exit 1
+          fi
+
+          echo "✅ Tag version matches package version: $PKG_VERSION"
 
       - name: Verify package contents
         run: |
@@ -51,19 +64,17 @@ jobs:
           npm pkg get name version description
 
       - name: Publish to npm (dry run)
-        if: ${{ inputs.dry-run == true }}
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run == true }}
         run: npm publish --access public --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Publish to npm
-        if: ${{ inputs.dry-run != true }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry-run != true) }}
         run: npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Log published version
-        if: ${{ inputs.dry-run != true }}
+        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.dry-run != true) }}
         run: |
           VERSION=$(npm pkg get version | tr -d '"')
           echo "✅ Successfully published @chmald/planka-mcp@${VERSION} to npm"

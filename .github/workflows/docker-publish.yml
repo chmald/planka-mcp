@@ -45,7 +45,6 @@ jobs:
 
       - name: Run tests
         run: npm test
-        continue-on-error: true
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -125,8 +124,8 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: anchore/sbom-action@v0
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.package-version.outputs.version }}
-          artifact-name: sbom-${{ steps.package-version.outputs.version }}.spdx.json
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }}
+          artifact-name: sbom-sha-${{ github.sha }}.spdx.json
           output-file: ./sbom.spdx.json
 
       - name: Upload SBOM artifact

@@ -3,6 +3,7 @@
  */
 import { GroupedToolDefinition } from "../types.js";
 import {
+  authTool,
   projectsTool,
   boardsTool,
   listsTool,
@@ -15,6 +16,7 @@ import {
 } from "./tools.js";
 
 export {
+  authTool,
   projectsTool,
   boardsTool,
   listsTool,
@@ -30,6 +32,7 @@ export {
  * All core tools combined
  */
 export const coreTools: GroupedToolDefinition[] = [
+  authTool,
   bootstrapTool,
   projectsTool,
   boardsTool,

@@ -3,7 +3,6 @@
  */
 import { GroupedToolDefinition } from "../types.js";
 import {
-  authTool,
   actionsTool,
   attachmentsTool,
   boardMembersTool,
@@ -20,7 +19,6 @@ import {
 } from "./tools.js";
 
 export {
-  authTool,
   actionsTool,
   attachmentsTool,
   boardMembersTool,
@@ -40,7 +38,6 @@ export {
  * All optional tools combined
  */
 export const optionalTools: GroupedToolDefinition[] = [
-  authTool,
   actionsTool,
   attachmentsTool,
   boardMembersTool,

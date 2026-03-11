@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.0",
   "info": {
-    "version": "2.0.0-rc.4",
+    "version": "2.0.3",
     "title": "PLANKA API",
     "description": "API documentation for PLANKA - Real-Time Collaborative Kanban Board Application",
     "license": {
@@ -204,7 +204,7 @@
           "size": {
             "type": "string",
             "description": "File size of the background image in bytes",
-            "example": 1024576
+            "example": "1024576"
           },
           "url": {
             "type": "string",
@@ -730,7 +730,7 @@
           "id": {
             "type": "string",
             "description": "Unique identifier for the config (always set to '1')",
-            "example": 1
+            "example": "1"
           },
           "smtpHost": {
             "type": "string",
@@ -1596,7 +1596,6 @@
           "avatar",
           "phone",
           "organization",
-          "termsType",
           "isDeactivated",
           "createdAt",
           "updatedAt"
@@ -1679,7 +1678,7 @@
             "type": "string",
             "nullable": true,
             "description": "Contact phone number",
-            "example": 1234567890
+            "example": "+1234567890"
           },
           "organization": {
             "type": "string",
@@ -1790,11 +1789,6 @@
             "default": "byDefault",
             "description": "Default sort order for projects display (personal field)",
             "example": "byDefault"
-          },
-          "termsType": {
-            "type": "string",
-            "description": "Type of terms applicable to the user based on role",
-            "example": "general"
           },
           "isSsoUser": {
             "type": "boolean",
@@ -2127,7 +2121,7 @@
                     "type": "string",
                     "minLength": 64,
                     "maxLength": 64,
-                    "description": "Terms signature hash based on user role",
+                    "description": "Terms signature hash",
                     "example": "940226c4c41f51afe3980ceb63704e752636526f4c52a4ea579e85b247493d94"
                   },
                   "initialLanguage": {
@@ -4296,6 +4290,17 @@
                       "description": "URL to the customer management panel (conditionally added for admins if configured)",
                       "example": "https://panel.example.com"
                     },
+                    "termsLanguages": {
+                      "type": "array",
+                      "description": "List of available language codes for terms localization",
+                      "items": {
+                        "type": "string"
+                      },
+                      "example": [
+                        "de-DE",
+                        "en-US"
+                      ]
+                    },
                     "version": {
                       "type": "string",
                       "description": "Current version of the PLANKA application",
@@ -5177,7 +5182,7 @@
                     "type": "number",
                     "minimum": 0,
                     "nullable": true,
-                    "description": "Position of the card within the list",
+                    "description": "Position of the card within the list (required when moving card to new list)",
                     "example": 65536
                   },
                   "name": {
@@ -8529,8 +8534,8 @@
                   "type": {
                     "type": "string",
                     "enum": [
-                      "public",
-                      "private"
+                      "private",
+                      "shared"
                     ],
                     "description": "Type of the project",
                     "example": "private"
@@ -9595,7 +9600,7 @@
         }
       }
     },
-    "/terms/{type}": {
+    "/terms": {
       "get": {
         "summary": "Get terms and conditions",
         "description": "Retrieves terms and conditions in the specified language.",
@@ -9605,30 +9610,12 @@
         "operationId": "getTerms",
         "parameters": [
           {
-            "name": "type",
-            "in": "path",
-            "required": true,
-            "description": "Type of terms to retrieve",
-            "schema": {
-              "type": "string",
-              "enum": [
-                "general",
-                "extended"
-              ],
-              "example": "general"
-            }
-          },
-          {
             "name": "language",
             "in": "query",
             "required": false,
             "description": "Language code for terms localization",
             "schema": {
               "type": "string",
-              "enum": [
-                "de-DE",
-                "en-US"
-              ],
               "example": "en-US"
             }
           }
@@ -9653,21 +9640,8 @@
                         "signature"
                       ],
                       "properties": {
-                        "type": {
-                          "type": "string",
-                          "enum": [
-                            "general",
-                            "extended"
-                          ],
-                          "description": "Type of terms",
-                          "example": "en-US"
-                        },
                         "language": {
                           "type": "string",
-                          "enum": [
-                            "de-DE",
-                            "en-US"
-                          ],
                           "description": "Language code used",
                           "example": "en-US"
                         },
@@ -9830,7 +9804,7 @@
                     "maxLength": 128,
                     "nullable": true,
                     "description": "Contact phone number",
-                    "example": 1234567890
+                    "example": "+1234567890"
                   },
                   "organization": {
                     "type": "string",
@@ -10157,7 +10131,7 @@
                     "maxLength": 128,
                     "nullable": true,
                     "description": "Contact phone number",
-                    "example": 1234567890
+                    "example": "+1234567890"
                   },
                   "organization": {
                     "type": "string",

@@ -17,8 +17,11 @@ import { getEnabledTools, toolCounts, GroupedToolDefinition } from "./tools/inde
 const PLANKA_BASE_URL = process.env.PLANKA_BASE_URL || "http://localhost:3000";
 const PLANKA_USERNAME = process.env.PLANKA_USERNAME;
 const PLANKA_PASSWORD = process.env.PLANKA_PASSWORD;
+const PLANKA_API_KEY = process.env.PLANKA_API_KEY?.trim();
 const MCP_PORT = parseInt(process.env.MCP_PORT || "3001", 10);
 const MCP_TRANSPORT = process.env.MCP_TRANSPORT || "stdio"; // "stdio" or "sse"
+const MAX_HTTP_RETRIES = parseInt(process.env.PLANKA_HTTP_MAX_RETRIES || "2", 10);
+const RETRY_BASE_DELAY_MS = parseInt(process.env.PLANKA_HTTP_RETRY_BASE_DELAY_MS || "250", 10);
 
 // Tool category configuration
 const ENABLE_ALL_TOOLS = process.env.ENABLE_ALL_TOOLS === "true";
@@ -36,7 +39,7 @@ async function getAccessToken(): Promise<string> {
   }
 
   if (!PLANKA_USERNAME || !PLANKA_PASSWORD) {
-    throw new Error("PLANKA_USERNAME and PLANKA_PASSWORD environment variables are required");
+    throw new Error("Authentication is not configured. Set PLANKA_API_KEY or PLANKA_USERNAME and PLANKA_PASSWORD.");
   }
 
   const loginUrl = `${PLANKA_BASE_URL}/api/access-tokens`;
@@ -72,6 +75,18 @@ function truncate(s: string, n: number): string {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function shouldRetryStatus(statusCode: number): boolean {
+  return statusCode === 408 || statusCode === 429 || statusCode >= 500;
+}
+
+function formatAttempt(attempt: number): string {
+  return `${attempt + 1}/${MAX_HTTP_RETRIES + 1}`;
+}
+
 // ----- Build MCP tools from grouped tool definitions -----
 interface McpToolDefinition {
   tool: Tool;
@@ -98,7 +113,11 @@ function buildTools(): McpToolDefinition[] {
 // ----- Execute API call for grouped tools -----
 async function executeGroupedApiCall(
   groupedDef: GroupedToolDefinition,
-  input: any
+  input: any,
+  overridePath?: string,
+  allowCustomFieldDollarFallback = true,
+  retryAttempt = 0,
+  unauthorizedRetried = false
 ): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const action = input?.action;
@@ -113,7 +132,7 @@ async function executeGroupedApiCall(
     }
 
     // Construct URL with path parameters
-    let actualPath = operation.path;
+    let actualPath = overridePath ?? operation.path;
     
     // Replace path parameters from 'id' field or 'data' field
     const pathParams = actualPath.match(/\{(\w+)\}/g) || [];
@@ -165,8 +184,12 @@ async function executeGroupedApiCall(
     // Add authentication header if required (default to true)
     const requiresAuth = operation.requiresAuth !== false;
     if (requiresAuth) {
-      const token = await getAccessToken();
-      headers["Authorization"] = `Bearer ${token}`;
+      if (PLANKA_API_KEY) {
+        headers["X-Api-Key"] = PLANKA_API_KEY;
+      } else {
+        const token = await getAccessToken();
+        headers["Authorization"] = `Bearer ${token}`;
+      }
     }
 
     // Handle request body
@@ -176,7 +199,28 @@ async function executeGroupedApiCall(
       body = JSON.stringify(input.data);
     }
 
-    const res = await undiciRequest(url, { method: methodUpper, headers, body });
+    let res;
+    try {
+      res = await undiciRequest(url, { method: methodUpper, headers, body });
+    } catch (requestError) {
+      if (retryAttempt < MAX_HTTP_RETRIES) {
+        const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, retryAttempt);
+        console.error(
+          `[retry] network error for ${groupedDef.name}.${action} (${methodUpper} ${actualPath}), attempt ${formatAttempt(retryAttempt)} failed, retrying in ${delayMs}ms: ${requestError instanceof Error ? requestError.message : String(requestError)}`
+        );
+        await sleep(delayMs);
+        return executeGroupedApiCall(
+          groupedDef,
+          input,
+          overridePath,
+          allowCustomFieldDollarFallback,
+          retryAttempt + 1,
+          unauthorizedRetried
+        );
+      }
+      throw requestError;
+    }
+
     const contentType = res.headers["content-type"] || "";
     const text = await res.body.text();
 
@@ -192,12 +236,71 @@ async function executeGroupedApiCall(
     if (res.statusCode >= 200 && res.statusCode < 300) {
       return { success: true, data };
     } else {
-      // If we get 401, clear the cached token and retry once
-      if (res.statusCode === 401 && requiresAuth && cachedToken) {
+      // If we get 401 with bearer auth, clear the cached token and retry once.
+      // API key auth cannot be refreshed in-process.
+      if (res.statusCode === 401 && requiresAuth && !PLANKA_API_KEY && cachedToken && !unauthorizedRetried) {
         cachedToken = null;
         tokenExpiry = 0;
-        return executeGroupedApiCall(groupedDef, input);
+        console.error(
+          `[auth] received 401 for ${groupedDef.name}.${action} (${methodUpper} ${actualPath}); clearing cached token and retrying once`
+        );
+        return executeGroupedApiCall(
+          groupedDef,
+          input,
+          overridePath,
+          allowCustomFieldDollarFallback,
+          retryAttempt,
+          true
+        );
       }
+
+      // Compatibility fallback for Planka path variant introduced in newer swagger docs:
+      // customFieldId:${customFieldId} vs customFieldId:{customFieldId}
+      if (
+        res.statusCode === 404 &&
+        allowCustomFieldDollarFallback &&
+        groupedDef.name === "customFields" &&
+        (action === "setValue" || action === "clearValue")
+      ) {
+        const fallbackPath = (overridePath ?? operation.path).replace(
+          "customFieldId:{customFieldId}",
+          "customFieldId:${customFieldId}"
+        );
+
+        if (fallbackPath !== (overridePath ?? operation.path)) {
+          console.error(
+            `[compat] 404 for ${groupedDef.name}.${action} using ${actualPath}; retrying with legacy custom field path variant`
+          );
+          return executeGroupedApiCall(
+            groupedDef,
+            input,
+            fallbackPath,
+            false,
+            retryAttempt,
+            unauthorizedRetried
+          );
+        }
+      }
+
+      if (shouldRetryStatus(res.statusCode) && retryAttempt < MAX_HTTP_RETRIES) {
+        const delayMs = RETRY_BASE_DELAY_MS * Math.pow(2, retryAttempt);
+        console.error(
+          `[retry] transient HTTP ${res.statusCode} for ${groupedDef.name}.${action} (${methodUpper} ${actualPath}), attempt ${formatAttempt(retryAttempt)} failed, retrying in ${delayMs}ms`
+        );
+        await sleep(delayMs);
+        return executeGroupedApiCall(
+          groupedDef,
+          input,
+          overridePath,
+          allowCustomFieldDollarFallback,
+          retryAttempt + 1,
+          unauthorizedRetried
+        );
+      }
+
+      console.error(
+        `[error] API call failed for ${groupedDef.name}.${action} (${methodUpper} ${actualPath}) with HTTP ${res.statusCode}`
+      );
       
       return {
         success: false,
@@ -205,6 +308,9 @@ async function executeGroupedApiCall(
       };
     }
   } catch (error) {
+    console.error(
+      `[error] API call crashed for ${groupedDef.name}.${input?.action ?? "unknown"}: ${error instanceof Error ? error.message : String(error)}`
+    );
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error),
@@ -228,7 +334,7 @@ function createMcpServer() {
   const server = new McpServer(
     {
       name: "planka-mcp",
-      version: "2.0.2",
+      version: "2.0.3",
     },
     {
       capabilities: {

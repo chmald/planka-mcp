@@ -7,6 +7,8 @@
 
 import { describe, it } from "node:test";
 import assert from "node:assert";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 
 // Import from compiled dist (after build)
 import {
@@ -150,6 +152,67 @@ describe("Tool Definitions", () => {
       const uniqueNames = new Set(names);
       assert.strictEqual(names.length, uniqueNames.size, "All tool names must be unique");
       console.log(`  ✓ All ${names.length} tool names are unique`);
+    });
+  });
+
+  describe("Swagger v2.0.3 Coverage", () => {
+    it("should keep tool paths aligned with swagger paths", () => {
+      const swaggerPath = resolve(process.cwd(), "swagger.json");
+      const swagger = JSON.parse(readFileSync(swaggerPath, "utf8"));
+
+      const specPaths: string[] = Object.keys(swagger.paths ?? {});
+      const toolPaths = allTools.flatMap(tool => Object.values(tool.operations).map(op => op.path));
+      const uniqueToolPaths = [...new Set(toolPaths)];
+
+      const normalize = (path: string) => path.replace(/\$\{(\w+)\}/g, "{$1}");
+
+      const toolPathsNotInSpec = uniqueToolPaths.filter(
+        toolPath => !specPaths.some(specPath => normalize(specPath) === normalize(toolPath))
+      );
+      const specPathsNotInTools = specPaths.filter(
+        specPath => !uniqueToolPaths.some(toolPath => normalize(toolPath) === normalize(specPath))
+      );
+
+      assert.deepStrictEqual(
+        toolPathsNotInSpec,
+        [],
+        `Tool paths missing from swagger: ${toolPathsNotInSpec.join(", ")}`
+      );
+      assert.deepStrictEqual(
+        specPathsNotInTools,
+        [],
+        `Swagger paths not covered by tools: ${specPathsNotInTools.join(", ")}`
+      );
+    });
+
+    it("should map auth.getTerms to /terms without requiring a path id", () => {
+      const authTool = allTools.find(tool => tool.name === "auth");
+      assert.ok(authTool, "auth tool should exist");
+      assert.strictEqual(authTool!.operations.getTerms.path, "/terms");
+      assert.ok(!("id" in authTool!.inputSchema.properties), "auth tool should not require an id field");
+    });
+
+    it("should allow either custom field value path variant", () => {
+      const customFieldsTool = optionalTools.find(tool => tool.name === "customFields");
+      assert.ok(customFieldsTool, "customFields tool should exist");
+
+      const acceptedSetValuePaths = [
+        "/cards/{cardId}/custom-field-values/customFieldGroupId:{customFieldGroupId}:customFieldId:{customFieldId}",
+        "/cards/{cardId}/custom-field-values/customFieldGroupId:{customFieldGroupId}:customFieldId:${customFieldId}",
+      ];
+      const acceptedClearValuePaths = [
+        "/cards/{cardId}/custom-field-value/customFieldGroupId:{customFieldGroupId}:customFieldId:{customFieldId}",
+        "/cards/{cardId}/custom-field-value/customFieldGroupId:{customFieldGroupId}:customFieldId:${customFieldId}",
+      ];
+
+      assert.ok(
+        acceptedSetValuePaths.includes(customFieldsTool!.operations.setValue.path),
+        `Unexpected setValue path: ${customFieldsTool!.operations.setValue.path}`
+      );
+      assert.ok(
+        acceptedClearValuePaths.includes(customFieldsTool!.operations.clearValue.path),
+        `Unexpected clearValue path: ${customFieldsTool!.operations.clearValue.path}`
+      );
     });
   });
 });

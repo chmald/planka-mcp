@@ -1,6 +1,71 @@
 import { GroupedToolDefinition, buildGroupedSchema } from "../types.js";
 
 /**
+ * Auth tool - authentication operations
+ */
+export const authTool: GroupedToolDefinition = {
+  name: "auth",
+  description: "Authentication operations for login flows, token management, and terms acceptance.",
+  operations: {
+    login: {
+      method: "POST",
+      path: "/access-tokens",
+      requiresAuth: false,
+      description: "Authenticate with email/username and password",
+    },
+    logout: {
+      method: "DELETE",
+      path: "/access-tokens/me",
+      description: "Logout current user",
+    },
+    acceptTerms: {
+      method: "POST",
+      path: "/access-tokens/accept-terms",
+      requiresAuth: false,
+      description: "Accept terms during authentication flow",
+    },
+    oidcExchange: {
+      method: "POST",
+      path: "/access-tokens/exchange-with-oidc",
+      requiresAuth: false,
+      description: "Exchange OIDC code for access token",
+    },
+    revokePending: {
+      method: "POST",
+      path: "/access-tokens/revoke-pending-token",
+      requiresAuth: false,
+      description: "Revoke pending authentication token",
+    },
+    getTerms: {
+      method: "GET",
+      path: "/terms",
+      requiresAuth: false,
+      description: "Get terms and conditions",
+    },
+  },
+  inputSchema: buildGroupedSchema(
+    ["login", "logout", "acceptTerms", "oidcExchange", "revokePending", "getTerms"],
+    {
+      login: "Login with credentials",
+      logout: "Logout current session",
+      acceptTerms: "Accept terms during auth",
+      oidcExchange: "Exchange OIDC code",
+      revokePending: "Revoke pending token",
+      getTerms: "Get terms document",
+    },
+    {
+      data: {
+        description: "Auth data: { emailOrUsername?: string, password?: string, token?: string, code?: string }",
+        requiredFor: ["login", "acceptTerms", "oidcExchange", "revokePending"],
+      },
+      query: {
+        language: { type: "string", description: "Language code for terms" },
+      },
+    }
+  ),
+};
+
+/**
  * Projects tool - manages Planka projects
  */
 export const projectsTool: GroupedToolDefinition = {

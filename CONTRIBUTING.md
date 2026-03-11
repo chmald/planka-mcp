@@ -79,10 +79,12 @@ npm publish --access public
 ### Creating a Release
 
 1. Update version in `package.json`
-2. Commit: `git commit -m "Release v1.0.0"`
-3. Tag and push: `git tag v1.0.0 && git push origin v1.0.0`
+2. Add release notes to `CHANGELOG.md`
+3. Commit: `git commit -m "Release v1.0.0"`
+4. Tag and push: `git tag v1.0.0 && git push origin v1.0.0`
 
 GitHub Actions will automatically:
+- Publish package to npm
 - Build multi-arch Docker images
 - Push to Docker Hub with appropriate tags
 - Generate SBOM

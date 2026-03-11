@@ -26,8 +26,7 @@ Add to your `claude_desktop_config.json`:
       "args": ["@chmald/planka-mcp"],
       "env": {
         "PLANKA_BASE_URL": "http://localhost:3000",
-        "PLANKA_USERNAME": "your-username",
-        "PLANKA_PASSWORD": "your-password"
+        "PLANKA_API_KEY": "your-api-key"
       }
     }
   }
@@ -47,8 +46,7 @@ Add to `.vscode/mcp.json`:
       "args": ["@chmald/planka-mcp"],
       "env": {
         "PLANKA_BASE_URL": "http://localhost:3000",
-        "PLANKA_USERNAME": "your-username",
-        "PLANKA_PASSWORD": "your-password"
+        "PLANKA_API_KEY": "your-api-key"
       }
     }
   }
@@ -65,8 +63,7 @@ Add to `.vscode/mcp.json`:
       "args": [
         "run", "-i", "--rm",
         "-e", "PLANKA_BASE_URL=http://host.docker.internal:3000",
-        "-e", "PLANKA_USERNAME=your-username",
-        "-e", "PLANKA_PASSWORD=your-password",
+        "-e", "PLANKA_API_KEY=your-api-key",
         "chmald/planka-mcp:latest"
       ]
     }
@@ -85,20 +82,39 @@ Add to `.vscode/mcp.json`:
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `PLANKA_BASE_URL` | Yes | `http://localhost:3000` | Your Planka instance URL |
-| `PLANKA_USERNAME` | Yes | - | Planka username or email |
-| `PLANKA_PASSWORD` | Yes | - | Planka password |
+| `PLANKA_API_KEY` | No* | - | Planka API key sent as `X-Api-Key` |
+| `PLANKA_USERNAME` | No* | - | Planka username or email |
+| `PLANKA_PASSWORD` | No* | - | Planka password |
+| `MCP_TRANSPORT` | No | `stdio` | MCP transport mode: `stdio` or `sse` |
+| `MCP_PORT` | No | `3001` | HTTP port used when `MCP_TRANSPORT=sse` |
+| `PLANKA_HTTP_MAX_RETRIES` | No | `2` | Max retry attempts for transient HTTP/network failures per request |
+| `PLANKA_HTTP_RETRY_BASE_DELAY_MS` | No | `250` | Base retry delay in milliseconds (exponential backoff) |
 | `ENABLE_ALL_TOOLS` | No | `false` | Enable all 27 tools |
 | `ENABLE_ADMIN_TOOLS` | No | `false` | Enable admin tools |
 | `ENABLE_OPTIONAL_TOOLS` | No | `false` | Enable optional tools |
 
+\* Authentication is required. Provide either `PLANKA_API_KEY`, or both `PLANKA_USERNAME` and `PLANKA_PASSWORD`.
+
+### Authentication Modes
+
+- **API key (recommended):** Set `PLANKA_API_KEY`.
+- **Username/password:** Set `PLANKA_USERNAME` and `PLANKA_PASSWORD`.
+- If both are set, the server uses `PLANKA_API_KEY`.
+
+### Retry Behavior
+
+- Retries apply to transient failures (`408`, `429`, `5xx`) and network request errors.
+- Delay uses exponential backoff: `PLANKA_HTTP_RETRY_BASE_DELAY_MS * 2^attempt`.
+- `PLANKA_HTTP_MAX_RETRIES` controls additional attempts after the initial request.
+
 ### Tool Categories
 
-By default, **9 core tools** are enabled for essential Kanban operations:
+By default, **10 core tools** are enabled for essential Kanban operations:
 
 | Category | Tools | Description |
 |----------|-------|-------------|
-| **Core** | 9 | Projects, boards, lists, cards, tasks, comments, labels (always enabled) |
-| **Optional** | 14 | Attachments, custom fields, notifications, etc. |
+| **Core** | 10 | Auth, projects, boards, lists, cards, tasks, comments, labels (always enabled) |
+| **Optional** | 13 | Attachments, custom fields, notifications, etc. |
 | **Admin** | 4 | User management, webhooks, config |
 
 Enable more tools:
@@ -119,6 +135,7 @@ Each tool uses an `action` parameter. Example: `{ "action": "list" }` or `{ "act
 
 | Tool | Actions |
 |------|---------|
+| `auth` | `login`, `logout`, `acceptTerms`, `oidcExchange`, `revokePending`, `getTerms` |
 | `bootstrap` | `get` - Get app data, user info, projects |
 | `projects` | `list`, `get`, `create`, `update`, `delete` |
 | `boards` | `get`, `create`, `update`, `delete` |
@@ -161,7 +178,6 @@ Each tool uses an `action` parameter. Example: `{ "action": "list" }` or `{ "act
 | `cardMemberExtras` | `remove` |
 | `backgroundImages` | `upload`, `delete` |
 | `userInfo` | `get` |
-| `auth` | `login`, `logout`, `acceptTerms`, etc. |
 
 </details>
 
@@ -177,8 +193,7 @@ docker run -d \
   -p 3001:3001 \
   -e MCP_TRANSPORT=sse \
   -e PLANKA_BASE_URL=http://your-planka-server:3000 \
-  -e PLANKA_USERNAME=admin \
-  -e PLANKA_PASSWORD=your-password \
+  -e PLANKA_API_KEY=your-api-key \
   chmald/planka-mcp:latest
 ```
 
@@ -189,7 +204,7 @@ Connect clients to `http://localhost:3001/sse`.
 ## Troubleshooting
 
 ### "Authentication failed"
-- Verify username/password are correct
+- Verify your API key (or username/password) is correct
 - Check that `PLANKA_BASE_URL` is accessible
 
 ### "Connection refused" with Docker
@@ -207,11 +222,24 @@ npx @chmald/planka-mcp 2>&1 | tee debug.log
 
 ---
 
+## Upgrade Notes
+
+Check [CHANGELOG.md](CHANGELOG.md) for full version-by-version details.
+
+### Upgrading to 2.0.3
+
+- The `auth` tool moved from optional tools to core tools and is now always available.
+- API key authentication is now supported with `PLANKA_API_KEY` (`X-Api-Key`).
+- If both API key and username/password are configured, `PLANKA_API_KEY` is used.
+
+---
+
 ## Links
 
 - [GitHub Issues](https://github.com/chmald/planka-mcp/issues) - Report bugs
 - [Planka](https://planka.app/) - The Kanban board application
 - [CONTRIBUTING.md](CONTRIBUTING.md) - Development & publishing guide
+- [CHANGELOG.md](CHANGELOG.md) - Versioned API and tooling updates
 - [SECURITY.md](SECURITY.md) - Security policy
 
 ## License

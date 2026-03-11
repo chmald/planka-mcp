@@ -2,9 +2,9 @@
  * Planka MCP Server - Grouped Tool Definitions
  * 
  * This module exports all tool definitions organized by category:
- * - Core: Essential Kanban operations (always enabled) - 9 tools
+ * - Core: Essential Kanban operations (always enabled) - 10 tools
  * - Admin: Administrative functions requiring admin privileges - 4 tools
- * - Optional: Extended functionality for advanced use cases - 14 tools
+ * - Optional: Extended functionality for advanced use cases - 13 tools
  * 
  * Total: 27 grouped tools covering 104 API operations
  */
